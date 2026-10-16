@@ -10,6 +10,7 @@
 #include "canvas.hpp"
 #include "color.hpp"
 #include "tool.hpp"
+#include <array>
 #include <vector>
 #include <algorithm>
 
@@ -96,18 +97,36 @@ class cube
                 }
             }
 
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[0]),zoom(_canvas,_camera,projected_vertex[1]),zoom(_canvas,_camera,projected_vertex[2]),_col);
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[0]),zoom(_canvas,_camera,projected_vertex[2]),zoom(_canvas,_camera,projected_vertex[3]),_col);
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[4]),zoom(_canvas,_camera,projected_vertex[0]),zoom(_canvas,_camera,projected_vertex[3]),_col);
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[4]),zoom(_canvas,_camera,projected_vertex[3]),zoom(_canvas,_camera,projected_vertex[7]),_col);
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[5]),zoom(_canvas,_camera,projected_vertex[4]),zoom(_canvas,_camera,projected_vertex[7]),_col);
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[5]),zoom(_canvas,_camera,projected_vertex[7]),zoom(_canvas,_camera,projected_vertex[6]),_col);
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[1]),zoom(_canvas,_camera,projected_vertex[5]),zoom(_canvas,_camera,projected_vertex[6]),_col);
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[1]),zoom(_canvas,_camera,projected_vertex[6]),zoom(_canvas,_camera,projected_vertex[2]),_col);
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[4]),zoom(_canvas,_camera,projected_vertex[5]),zoom(_canvas,_camera,projected_vertex[1]),_col);
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[4]),zoom(_canvas,_camera,projected_vertex[1]),zoom(_canvas,_camera,projected_vertex[0]),_col);
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[2]),zoom(_canvas,_camera,projected_vertex[6]),zoom(_canvas,_camera,projected_vertex[7]),_col);
-            fill_triangle(_canvas,zoom(_canvas,_camera,projected_vertex[2]),zoom(_canvas,_camera,projected_vertex[7]),zoom(_canvas,_camera,projected_vertex[3]),_col);
+            const std::array<std::array<std::size_t, 4>, 6> faces = {{
+                {{0, 1, 2, 3}}, {{4, 0, 3, 7}}, {{5, 4, 7, 6}},
+                {{1, 5, 6, 2}}, {{4, 5, 1, 0}}, {{2, 6, 7, 3}}
+            }};
+            const std::array<double, 6> intensities = {{1.0, 0.72, 0.5, 0.82, 0.62, 0.9}};
+            std::array<std::size_t, 6> draw_order = {{0, 1, 2, 3, 4, 5}};
+            std::sort(draw_order.begin(), draw_order.end(),
+                [this, &faces](std::size_t left, std::size_t right)
+                {
+                    double left_depth = 0.0;
+                    double right_depth = 0.0;
+                    for (std::size_t i = 0; i < 4; ++i)
+                    {
+                        left_depth += vertex[faces[left][i]].z;
+                        right_depth += vertex[faces[right][i]].z;
+                    }
+                    return left_depth > right_depth;
+                });
+
+            for (const std::size_t face_index : draw_order)
+            {
+                const auto& face = faces[face_index];
+                const color face_color = _col * intensities[face_index];
+                const Point a = zoom(_canvas, _camera, projected_vertex[face[0]]);
+                const Point b = zoom(_canvas, _camera, projected_vertex[face[1]]);
+                const Point c = zoom(_canvas, _camera, projected_vertex[face[2]]);
+                const Point d = zoom(_canvas, _camera, projected_vertex[face[3]]);
+                fill_triangle(_canvas, a, b, c, face_color);
+                fill_triangle(_canvas, a, c, d, face_color);
+            }
             delete[] projected_vertex;
         }
         ~cube(){
@@ -117,4 +136,25 @@ class cube
         Coordinate* vertex;
 };
 
+
+/*class cube_model
+{
+
+
+
+
+    public:
+        std::array<Coordinate,8> vertex = {Coordinate(1,1,1),Coordinate(1,-1,1),Coordinate(1,1,-1),Coordinate(1,-1,-1),
+            Coordinate(-1,1,1),Coordinate(-1,-1,1),Coordinate(-1,1,-1),Coordinate(-1,-1,-1)};
+        std::array<std::array<size_t,3>,12> triangles = {{
+            {{0,1,3}}, {{0,3,2}},
+            {{4,6,7}}, {{4,7,5}},
+            {{0,2,6}}, {{0,6,4}},
+            {{1,5,7}}, {{1,7,3}},
+            {{0,4,5}}, {{0,5,1}},
+            {{2,3,7}}, {{2,7,6}}
+        }};
+
+};
+*/
 #endif
