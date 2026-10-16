@@ -137,12 +137,23 @@ class cube
 };
 
 
-/*class cube_model
+class model
 {
 
+};
+
+class instance
+{
+
+    private:
+        Coordinate position;
+
+};
 
 
 
+class cube_model : public model
+{
     public:
         std::array<Coordinate,8> vertex = {Coordinate(1,1,1),Coordinate(1,-1,1),Coordinate(1,1,-1),Coordinate(1,-1,-1),
             Coordinate(-1,1,1),Coordinate(-1,-1,1),Coordinate(-1,1,-1),Coordinate(-1,-1,-1)};
@@ -154,7 +165,8 @@ class cube
             {{0,4,5}}, {{0,5,1}},
             {{2,3,7}}, {{2,7,6}}
         }};
-
 };
-*/
+
+
+
 #endif
