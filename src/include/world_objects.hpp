@@ -13,6 +13,8 @@
 #include <array>
 #include <vector>
 #include <algorithm>
+#include <cmath>
+#include <stdexcept>
 
 class triangle
 {
@@ -136,6 +138,12 @@ class cube
         Coordinate* vertex;
 };
 
+enum class rotation_axis
+{
+    x,
+    y,
+    z
+};
 
 class model
 {
@@ -144,10 +152,11 @@ class model
 
 class instance
 {
-
-    private:
-        Coordinate position;
-
+    public:
+        virtual void extend(const double&) = 0;
+        virtual void move(const _Vector&) = 0;
+        virtual void rotate(const double&,rotation_axis)=0;
+        virtual void draw(canvas& ,camera&,const color&)=0;
 };
 
 
@@ -165,8 +174,123 @@ class cube_model : public model
             {{0,4,5}}, {{0,5,1}},
             {{2,3,7}}, {{2,7,6}}
         }};
+        std::array<double, 12> intensities = {{
+            1.0, 1.0, 0.72, 0.72,
+            0.5, 0.5, 0.82, 0.82,
+            0.62, 0.62, 0.9, 0.9
+        }};
 };
 
+
+class cube_instance : public instance
+{
+    public:
+        void extend(const double& r)override{
+            for(int i=0;i<8;i++)    
+                init_cube.vertex[i]*=r;
+        }    
+
+        void move(const _Vector& _v)override
+        {
+            for(int i=0;i<8;i++)
+                init_cube.vertex[i]+=_v;
+        }
+
+        void draw(canvas& _canvas, camera& _camera, const color& _col) override
+        {
+            std::array<Coordinate, 8> projected_vertices;
+            for (std::size_t i = 0; i < init_cube.vertex.size(); ++i)
+            {
+                if (!Project(_camera, init_cube.vertex[i], projected_vertices[i]))
+                    return;
+            }
+
+            std::array<std::size_t, 12> draw_order;
+            for (std::size_t i = 0; i < draw_order.size(); ++i)
+                draw_order[i] = i;
+
+            std::sort(draw_order.begin(), draw_order.end(),
+                [this](std::size_t left, std::size_t right)
+                {
+                    double left_depth = 0.0;
+                    double right_depth = 0.0;
+                    for (std::size_t i = 0; i < 3; ++i)
+                    {
+                        left_depth += init_cube.vertex[init_cube.triangles[left][i]].z;
+                        right_depth += init_cube.vertex[init_cube.triangles[right][i]].z;
+                    }
+                    return left_depth > right_depth;
+                });
+
+            for (const std::size_t triangle_index : draw_order)
+            {
+                const auto& triangle_vertices = init_cube.triangles[triangle_index];
+                const Point a = zoom(_canvas, _camera, projected_vertices[triangle_vertices[0]]);
+                const Point b = zoom(_canvas, _camera, projected_vertices[triangle_vertices[1]]);
+                const Point c = zoom(_canvas, _camera, projected_vertices[triangle_vertices[2]]);
+                fill_triangle(_canvas, a, b, c, _col * init_cube.intensities[triangle_index]);
+            }
+        }
+
+        void rotate(const double& angle_degrees, rotation_axis axis)override
+        {
+            constexpr double pi = 3.14159265358979323846;
+            const double angle_radians = angle_degrees * pi / 180.0;
+            const double cosine = std::cos(angle_radians);
+            const double sine = std::sin(angle_radians);
+            std::array<std::array<double, 3>, 3> rotation_matrix = {{
+                {{1.0, 0.0, 0.0}},
+                {{0.0, 1.0, 0.0}},
+                {{0.0, 0.0, 1.0}}
+            }};
+
+            switch (axis)
+            {
+                case rotation_axis::x:
+                    rotation_matrix = {{
+                        {{1.0, 0.0, 0.0}},
+                        {{0.0, cosine, -sine}},
+                        {{0.0, sine, cosine}}
+                    }};
+                    break;
+                case rotation_axis::y:
+                    rotation_matrix = {{
+                        {{cosine, 0.0, sine}},
+                        {{0.0, 1.0, 0.0}},
+                        {{-sine, 0.0, cosine}}
+                    }};
+                    break;
+                case rotation_axis::z:
+                    rotation_matrix = {{
+                        {{cosine, -sine, 0.0}},
+                        {{sine, cosine, 0.0}},
+                        {{0.0, 0.0, 1.0}}
+                    }};
+                    break;
+                default:
+                    throw std::invalid_argument("Invalid rotation axis");
+            }
+
+            for (std::size_t i = 0; i < init_cube.vertex.size(); ++i)
+            {
+                const Coordinate& vertex = init_cube.vertex[i];
+                init_cube.vertex[i] = Coordinate(
+                    rotation_matrix[0][0] * vertex.x +
+                        rotation_matrix[0][1] * vertex.y +
+                        rotation_matrix[0][2] * vertex.z,
+                    rotation_matrix[1][0] * vertex.x +
+                        rotation_matrix[1][1] * vertex.y +
+                        rotation_matrix[1][2] * vertex.z,
+                    rotation_matrix[2][0] * vertex.x +
+                        rotation_matrix[2][1] * vertex.y +
+                        rotation_matrix[2][2] * vertex.z);
+            }
+        }
+    private:
+        cube_model init_cube;
+
+
+};
 
 
 #endif
