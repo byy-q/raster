@@ -5,6 +5,21 @@
 #include "./include/camera.hpp"
 #include "./include/world_objects.hpp"
 
+void camera::move(const _Vector& offset)
+{
+    const matrix4x4 inverse_translation = matrix4x4::translation(
+        Coordinate(-offset.x, -offset.y, -offset.z));
+    for (instance* object : all_instances())
+        object->apply_transform(inverse_translation);
+}
+
+void camera::rotate(double angle_degrees, rotation_axis axis)
+{
+    const matrix4x4 inverse_rotation = matrix4x4::rotation(-angle_degrees, axis);
+    for (instance* object : all_instances())
+        object->apply_transform(inverse_rotation);
+}
+
 /** 
  * @return : return the value of y between y_1 and y_2,with linear interpolation
 */
