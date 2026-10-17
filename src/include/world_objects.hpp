@@ -9,6 +9,7 @@
 #include "camera.hpp"
 #include "canvas.hpp"
 #include "color.hpp"
+#include "matrix.hpp"
 #include "tool.hpp"
 #include <array>
 #include <vector>
@@ -72,94 +73,54 @@ class triangle
 };
 
 
-class cube
-{
-    public:
-        cube(){
-            vertex = new Coordinate[8];
-            for(int i = 0; i<8;i++)
-                vertex[i] = {0.0,0.0,0.0}; 
-        }
-        cube(const Coordinate& A,const Coordinate& B,const Coordinate& C,const Coordinate& D
-        ,const Coordinate& E,const Coordinate&F,const Coordinate& G,const Coordinate&H){
-            vertex = new Coordinate[8];
-            vertex[0] = A;vertex[1] = B;vertex[2] = C;vertex[3] = D;
-            vertex[4] = E;vertex[5] = F;vertex[6] = G;vertex[7] = H;
-        }
-
-        void draw(canvas& _canvas,camera& _camera,const color& _col)
-        {
-            Coordinate* projected_vertex = new Coordinate[8];
-            for(int i=0;i<8;i++)
-            {
-                if(!Project(_camera,vertex[i],projected_vertex[i]))
-                {
-                    delete[] projected_vertex;
-                    return;
-                }
-            }
-
-            const std::array<std::array<std::size_t, 4>, 6> faces = {{
-                {{0, 1, 2, 3}}, {{4, 0, 3, 7}}, {{5, 4, 7, 6}},
-                {{1, 5, 6, 2}}, {{4, 5, 1, 0}}, {{2, 6, 7, 3}}
-            }};
-            const std::array<double, 6> intensities = {{1.0, 0.72, 0.5, 0.82, 0.62, 0.9}};
-            std::array<std::size_t, 6> draw_order = {{0, 1, 2, 3, 4, 5}};
-            std::sort(draw_order.begin(), draw_order.end(),
-                [this, &faces](std::size_t left, std::size_t right)
-                {
-                    double left_depth = 0.0;
-                    double right_depth = 0.0;
-                    for (std::size_t i = 0; i < 4; ++i)
-                    {
-                        left_depth += vertex[faces[left][i]].z;
-                        right_depth += vertex[faces[right][i]].z;
-                    }
-                    return left_depth > right_depth;
-                });
-
-            for (const std::size_t face_index : draw_order)
-            {
-                const auto& face = faces[face_index];
-                const color face_color = _col * intensities[face_index];
-                const Point a = zoom(_canvas, _camera, projected_vertex[face[0]]);
-                const Point b = zoom(_canvas, _camera, projected_vertex[face[1]]);
-                const Point c = zoom(_canvas, _camera, projected_vertex[face[2]]);
-                const Point d = zoom(_canvas, _camera, projected_vertex[face[3]]);
-                fill_triangle(_canvas, a, b, c, face_color);
-                fill_triangle(_canvas, a, c, d, face_color);
-            }
-            delete[] projected_vertex;
-        }
-        ~cube(){
-            delete[] vertex;
-        }
-    private:
-        Coordinate* vertex;
-};
-
-enum class rotation_axis
-{
-    x,
-    y,
-    z
-};
 
 class model
 {
 
 };
 
+class instance;
+
+inline std::vector<instance*>& all_instances()
+{
+    static std::vector<instance*> instances;
+    return instances;
+}
+
 class instance
 {
     public:
+        instance()
+        {
+            all_instances().push_back(this);
+        }
+
+        virtual ~instance()
+        {
+            std::vector<instance*>& instances = all_instances();
+            instances.erase(std::remove(instances.begin(), instances.end(), this), instances.end());
+        }
+
+        instance(const instance&) = delete;
+        instance& operator=(const instance&) = delete;
+        instance(instance&&) = delete;
+        instance& operator=(instance&&) = delete;
+
         virtual void extend(const double&) = 0;
         virtual void move(const _Vector&) = 0;
         virtual void rotate(const double&,rotation_axis)=0;
         virtual void draw(canvas& ,camera&,const color&)=0;
+
+    protected:
+        friend class camera;
+
+        void apply_transform(const matrix4x4& operation)
+        {
+            transform = operation * transform;
+        }
+
+        matrix4x4 transform;
 };
-
-
 
 class cube_model : public model
 {
@@ -186,22 +147,22 @@ class cube_instance : public instance
 {
     public:
         void extend(const double& r)override{
-            for(int i=0;i<8;i++)    
-                init_cube.vertex[i]*=r;
+            apply_transform(matrix4x4::scaling(r));
         }    
 
         void move(const _Vector& _v)override
         {
-            for(int i=0;i<8;i++)
-                init_cube.vertex[i]+=_v;
+            apply_transform(matrix4x4::translation(_v));
         }
 
         void draw(canvas& _canvas, camera& _camera, const color& _col) override
         {
             std::array<Coordinate, 8> projected_vertices;
+            std::array<Coordinate, 8> transformed_vertices;
             for (std::size_t i = 0; i < init_cube.vertex.size(); ++i)
             {
-                if (!Project(_camera, init_cube.vertex[i], projected_vertices[i]))
+                transformed_vertices[i] = transform.transform_point(init_cube.vertex[i]);
+                if (!Project(_camera, transformed_vertices[i], projected_vertices[i]))
                     return;
             }
 
@@ -210,14 +171,14 @@ class cube_instance : public instance
                 draw_order[i] = i;
 
             std::sort(draw_order.begin(), draw_order.end(),
-                [this](std::size_t left, std::size_t right)
+                [this, &transformed_vertices](std::size_t left, std::size_t right)
                 {
                     double left_depth = 0.0;
                     double right_depth = 0.0;
                     for (std::size_t i = 0; i < 3; ++i)
                     {
-                        left_depth += init_cube.vertex[init_cube.triangles[left][i]].z;
-                        right_depth += init_cube.vertex[init_cube.triangles[right][i]].z;
+                        left_depth += transformed_vertices[init_cube.triangles[left][i]].z;
+                        right_depth += transformed_vertices[init_cube.triangles[right][i]].z;
                     }
                     return left_depth > right_depth;
                 });
@@ -234,57 +195,7 @@ class cube_instance : public instance
 
         void rotate(const double& angle_degrees, rotation_axis axis)override
         {
-            constexpr double pi = 3.14159265358979323846;
-            const double angle_radians = angle_degrees * pi / 180.0;
-            const double cosine = std::cos(angle_radians);
-            const double sine = std::sin(angle_radians);
-            std::array<std::array<double, 3>, 3> rotation_matrix = {{
-                {{1.0, 0.0, 0.0}},
-                {{0.0, 1.0, 0.0}},
-                {{0.0, 0.0, 1.0}}
-            }};
-
-            switch (axis)
-            {
-                case rotation_axis::x:
-                    rotation_matrix = {{
-                        {{1.0, 0.0, 0.0}},
-                        {{0.0, cosine, -sine}},
-                        {{0.0, sine, cosine}}
-                    }};
-                    break;
-                case rotation_axis::y:
-                    rotation_matrix = {{
-                        {{cosine, 0.0, sine}},
-                        {{0.0, 1.0, 0.0}},
-                        {{-sine, 0.0, cosine}}
-                    }};
-                    break;
-                case rotation_axis::z:
-                    rotation_matrix = {{
-                        {{cosine, -sine, 0.0}},
-                        {{sine, cosine, 0.0}},
-                        {{0.0, 0.0, 1.0}}
-                    }};
-                    break;
-                default:
-                    throw std::invalid_argument("Invalid rotation axis");
-            }
-
-            for (std::size_t i = 0; i < init_cube.vertex.size(); ++i)
-            {
-                const Coordinate& vertex = init_cube.vertex[i];
-                init_cube.vertex[i] = Coordinate(
-                    rotation_matrix[0][0] * vertex.x +
-                        rotation_matrix[0][1] * vertex.y +
-                        rotation_matrix[0][2] * vertex.z,
-                    rotation_matrix[1][0] * vertex.x +
-                        rotation_matrix[1][1] * vertex.y +
-                        rotation_matrix[1][2] * vertex.z,
-                    rotation_matrix[2][0] * vertex.x +
-                        rotation_matrix[2][1] * vertex.y +
-                        rotation_matrix[2][2] * vertex.z);
-            }
+            apply_transform(matrix4x4::rotation(angle_degrees, axis));
         }
     private:
         cube_model init_cube;

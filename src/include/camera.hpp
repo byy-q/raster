@@ -39,7 +39,7 @@ class Coordinate
 };
 typedef Coordinate _Vector;
 
-
+enum class rotation_axis;
 
 class camera
 {
@@ -47,6 +47,10 @@ class camera
         camera(const double& _distance,const double& _width,const double& _height ):
         distance(_distance),width(_width),height(_height){}
         camera() = default;
+
+        void move(const _Vector& offset);
+        void rotate(double angle_degrees, rotation_axis axis);
+
     private:
         Coordinate origin = {0.0,0.0,0.0};
     public:
