@@ -9,6 +9,8 @@ A small C++ software rasterizer that projects 3D coordinates onto a pixel canvas
 - Line and triangle rasterization, including interpolated color intensity
 - Triangle and cube drawing helpers
 - A cube mesh definition with eight vertices and twelve triangle indices
+- 4x4 homogeneous transforms for cube instance scaling, translation, and rotation
+- Camera movement and rotation apply inverse transforms to all registered instances
 
 ## Repository layout
 
@@ -18,6 +20,7 @@ src/
     camera.hpp        Coordinates, camera
     canvas.hpp        BMP canvas and pixel operations
     color.hpp         RGB color type
+    matrix.hpp        4x4 homogeneous transformations
     tool.hpp          Rasterization and projection declarations
     world_objects.hpp Triangle, cube, and cube mesh definitions
   tool.cpp            Rasterization and projection implementations
@@ -29,13 +32,21 @@ src/
 
 ## Build
 
-The repository currently has no checked-in program entry point. Compile the rasterizer implementation to an object file:
+Build the rasterizer as a static library with CMake:
 
-### Windows PowerShell
+```powershell
+cmake -G "MinGW Makefiles" -S . -B object/cmake
+cmake --build object/cmake
+ctest --test-dir object/cmake --output-on-failure
+```
+
+The resulting `raster` library can be linked into a program that uses the headers under `src/include`. The repository currently has no checked-in program entry point.
+
+To compile the implementation to an object file directly instead:
 
 ```powershell
 New-Item -ItemType Directory -Force object | Out-Null
-g++ -std=c++17 -Wall -Wextra -c src/tool.cpp -o object/tool.o
+g++ -std=c++17 -I src/include -Wall -Wextra -c src/tool.cpp -o object/tool.o
 ```
 
 To build a runnable program, provide a `main` source file that uses the headers under `src/include`, then link it with `src/tool.cpp`. For example, if you create `src/test/main.cpp` locally:
